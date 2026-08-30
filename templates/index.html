@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HEAVISIDE | Groundwater Map</title>
+  <link href="https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='map.css') }}">
+  <style>html,body{overflow:hidden}</style>
+</head>
+<body>
+  <main class="map-page">
+    <div id="map" aria-label="Karnataka groundwater monitoring stations"></div>
+    <section class="map-search" aria-label="Search groundwater location">
+      <p class="eyebrow">HEAVISIDE · GROUNDWATER INTELLIGENCE</p>
+      <h1>Find a monitored location</h1>
+      <p>Search any village, town, city, or district in Karnataka. We will use the nearest valid coordinate from the groundwater CSV.</p>
+      <div class="search-row"><input id="mapSearchInput" type="search" placeholder="Enter a place in Karnataka" autocomplete="off"><button id="mapSearchBtn" type="button">Analyze</button></div>
+      <div id="searchResult" class="search-result" style="display:none"><strong id="resultName"></strong><span id="resultCoords"></span></div>
+      {% if error %}<p class="search-error">{{ error }}</p>{% endif %}
+    </section>
+    <section id="zonePopup" class="zone-popup" style="display:none" aria-live="polite">
+      <button id="zonePopupClose" type="button" aria-label="Close">×</button>
+      <div id="zoneStatus" class="zone-popup-status"><span class="zone-status-dot"></span><span class="zone-status-text"></span></div>
+      <h2 id="zoneTitle"></h2><p id="zoneCoords"></p>
+      <dl><div><dt>Latest level</dt><dd id="zoneLevel"></dd><small id="zoneLevelChange"></small></div><div><dt>Latest month</dt><dd id="zoneRain"></dd></div><div><dt>Anomaly score</dt><dd id="zoneAnomaly"></dd></div></dl>
+      <a id="zoneCta" href="#">Open dashboard</a>
+    </section>
+  </main>
+  <script src="https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.js"></script>
+  <script src="{{ url_for('static', filename='landing.js') }}"></script>
+</body>
+</html>
