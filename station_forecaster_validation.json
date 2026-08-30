@@ -1,0 +1,17 @@
+{
+  "validation_period": "2025-01 through 2025-12",
+  "validation_samples": 4148,
+  "persistence": {
+    "mae_m": 3.193148505303761,
+    "rmse_m": 7.1516473579517035,
+    "r2": 0.9544700117156495
+  },
+  "station_aware_blend": {
+    "mae_m": 3.0976987289191458,
+    "rmse_m": 7.009337447630978,
+    "r2": 0.9562639766799587
+  },
+  "blend_weight": 0.4,
+  "ridge_penalty": 1000.0,
+  "improves_persistence_mae": true
+}

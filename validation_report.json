@@ -1,0 +1,16 @@
+{
+  "checkpoint_sha256": "467e7833a873f4300b7ad31cd0aae1bde67c3e0b347a36421a6d7ed56b3ee83f",
+  "validation_start": "2025-01-01",
+  "samples": 4148,
+  "lstm": {
+    "mae_m": 0.2654436528682709,
+    "rmse_m": 0.38443435892909705,
+    "r2": 0.8871248960494995
+  },
+  "persistence": {
+    "mae_m": 0.10901466012001038,
+    "rmse_m": 0.24415851527468896,
+    "r2": 0.9544700384140015
+  },
+  "lstm_beats_persistence_mae": false
+}
