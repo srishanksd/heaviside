@@ -13,6 +13,15 @@ from model import GroundwaterLSTM
 class GroundwaterPredictor:
     """Use every valid raw Karnataka monitoring coordinate for location matching."""
 
+    RAW_DATASETS = (
+        "karnataka_man_gw_wl_monthly_data_2021_2025.csv",
+        "karnataka_man_gw_wl_monthly_data_2026_2030.csv",
+    )
+    NWDP_2026_2030_URL = (
+        "https://nwdp.nwic.gov.in/dataset/1cbc78e5-42e2-4140-a584-ec752c994955/"
+        "resource/4e393536-9a75-4ae8-a246-64a2530e16a9"
+    )
+
     def __init__(self, project_root=None):
         self.root = Path(project_root or Path(__file__).resolve().parent)
         self.prepared = pd.read_csv(self.root / "prepared_dataset.csv")
@@ -20,13 +29,35 @@ class GroundwaterPredictor:
         self.prepared["Month"] = pd.to_datetime(self.prepared["Month"])
         self.prepared = self.prepared.sort_values(["Station Code", "Month"])
 
-        self.raw = pd.read_csv(self.root / "karnataka_man_gw_wl_monthly_data_2021_2025.csv", low_memory=False).reset_index(names="csv_row_index")
+        raw_frames = []
+        for filename in self.RAW_DATASETS:
+            path = self.root / filename
+            if path.exists():
+                frame = pd.read_csv(path, low_memory=False)
+                # NWDP's 2026–2030 CSV currently wraps the quoted
+                # "Ground Water Level" header over two lines. Normalising
+                # whitespace keeps it compatible with the earlier export.
+                frame.columns = [" ".join(str(column).split()) for column in frame.columns]
+                frame["source_dataset"] = filename
+                raw_frames.append(frame)
+        if not raw_frames:
+            raise FileNotFoundError("No Karnataka groundwater monitoring dataset was found.")
+        self.raw = pd.concat(raw_frames, ignore_index=True).reset_index(names="csv_row_index")
         self.raw["Station Code"] = self.raw["Station Code"].astype(str).str.strip()
         self.raw["Monitoring Date"] = pd.to_datetime(self.raw["Monitoring Date"], dayfirst=True, errors="coerce")
         for column in ("Latitude", "Longitude", "Ground Water Level"):
             self.raw[column] = pd.to_numeric(self.raw[column], errors="coerce")
         self.raw = self.raw.dropna(subset=["Station Code", "Latitude", "Longitude", "Monitoring Date", "Ground Water Level"]).copy()
         self.raw["Month"] = self.raw["Monitoring Date"].dt.to_period("M").dt.to_timestamp()
+        # A small number of source rows encode a missing measurement as zero.
+        # Depth-to-water values can be shallow, but a zero immediately beside a
+        # normal (>5 m) reading is an export/sensor fault, not a real 30→0 m
+        # aquifer change. Keep all other values untouched for traceability.
+        self.raw = self.raw.sort_values(["Station Code", "Monitoring Date", "csv_row_index"])
+        previous_level = self.raw.groupby("Station Code")["Ground Water Level"].shift(1)
+        next_level = self.raw.groupby("Station Code")["Ground Water Level"].shift(-1)
+        invalid_zero = (self.raw["Ground Water Level"] <= 0) & ((previous_level > 5) | (next_level > 5))
+        self.raw = self.raw.loc[~invalid_zero].copy()
         # This is deliberately all raw CSV stations, not the ML training subset.
         station_columns = ["Station Code", "Latitude", "Longitude", "District", "Block", "GP Name"]
         self.stations = self.raw[station_columns].drop_duplicates("Station Code").sort_values("Station Code").reset_index(drop=True)
@@ -117,6 +148,32 @@ class GroundwaterPredictor:
         distances = self._distance(latitude, longitude, candidates.Latitude.to_numpy(float), candidates.Longitude.to_numpy(float))
         return candidates.iloc[int(np.argmin(distances))]
 
+    def _station_elevation(self, code):
+        """Use elevation only when it belongs to the selected monitoring station.
+
+        The former location-nearest fallback could show terrain from a different
+        station. A missing value is more honest than a geographically wrong one.
+        """
+        station_rows = self.prepared[self.prepared["Station Code"] == code]
+        if station_rows.empty or "elevation_m" not in station_rows:
+            return None
+        elevation = station_rows["elevation_m"].dropna()
+        return None if elevation.empty else float(elevation.median())
+
+    def _forecast_months(self, first_month, first_prediction, levels, months=3):
+        """Create a short, clearly labelled recursive monthly outlook."""
+        outlook = []
+        forecast_levels = list(np.asarray(levels, dtype=float))
+        prediction = float(first_prediction)
+        for offset in range(months):
+            month = first_month + pd.DateOffset(months=offset)
+            outlook.append({"month": month.strftime("%b %Y"), "groundwater": round(prediction, 2)})
+            forecast_levels.append(prediction)
+            # Subsequent horizons use a damped trend from observed plus forecasted
+            # levels, avoiding a claim that future government observations exist.
+            prediction = self._directional_baseline(np.asarray(forecast_levels))
+        return outlook
+
     @staticmethod
     def _number_or_none(value):
         return None if pd.isna(value) else float(value)
@@ -146,12 +203,18 @@ class GroundwaterPredictor:
             self._environment_record(latitude, longitude, row.Month)
             for row in raw_history.itertuples()
         ])
+        # The LSTM must always receive the selected station's observed history.
+        # For stations absent from the prepared training subset, retain their
+        # local groundwater readings while using nearest time-matched context
+        # for the environmental feature columns.
+        environmental_rows = environmental_rows.reset_index(drop=True).copy()
+        environmental_rows["groundwater_level"] = levels
         prediction = self._trained_prediction(code, prepared) if trained else None
         if prediction is None:
             prediction = self._directional_baseline(levels)
             method = "Raw-history directional trend (nearest station)"
         else: method = "Validated station-aware forecast"
-        lstm_prediction = self._lstm_prediction(environmental_rows) if trained else None
+        lstm_prediction = self._lstm_prediction(environmental_rows)
         weather = [{"month":row.Month.strftime("%b %Y"),"temperature_c":self._number_or_none(row.temperature_c),"rainfall_mm":self._number_or_none(row.rainfall_mm)} for row in environmental_rows.itertuples()]
         rainfall = weather[-1]["rainfall_mm"]
         support = self._support(code, levels, prediction, rainfall)
@@ -159,6 +222,13 @@ class GroundwaterPredictor:
         history=[{"month":row["Month"].strftime("%b %Y"),"groundwater":float(row["Ground Water Level"])} for row in records]
         csv_rows=[{"csv_row_index":int(row["csv_row_index"]),"monitoring_date":row["Monitoring Date"].strftime("%Y-%m-%d"),"groundwater_level":float(row["Ground Water Level"])} for row in records]
         last = environmental_rows.iloc[-1]
+        elevation = self._number_or_none(location.get("elevation_m"))
+        elevation_source = "Exact searched/map coordinate terrain elevation"
+        if elevation is None:
+            elevation = self._station_elevation(code)
+            elevation_source = "Station-matched environmental record" if elevation is not None else "Unavailable"
         change = prediction-current
+        prediction_risk = "critical" if change >= 1.0 else ("moderate" if change >= 0.25 else "normal")
         feature_source = "Station-matched training features" if trained else "Nearest time-matched environmental dataset record"
-        return {"location":{"name":location.get("name","Searched location"),"address":location.get("address", ""),"latitude":latitude,"longitude":longitude},"station":{"code":code,"latitude":float(station.Latitude),"longitude":float(station.Longitude),"district":station.District,"block":station.Block,"gp_name":station["GP Name"],"distance_km":float(station.distance_km)},"current_groundwater":current,"prediction":prediction,"lstm_prediction":lstm_prediction,"change":change,"prediction_status":"approximately stable" if abs(change)<.1 else ("increase" if change>0 else "decrease"),"forecast_method":method,"forecast_version":4,"decision_support":support,"history":history,"weather_history":weather,"temperature":self._number_or_none(last.temperature_c),"rainfall":rainfall,"soil_ph":self._number_or_none(last.soil_ph),"clay":self._number_or_none(last.clay_percent),"sand":self._number_or_none(last.sand_percent),"silt":self._number_or_none(last.silt_percent),"organic_carbon":self._number_or_none(last.organic_carbon),"nitrogen":self._number_or_none(last.nitrogen),"elevation":self._number_or_none(last.elevation_m),"chart":{"dates":[x["month"] for x in history],"values":[x["groundwater"] for x in history],"forecast_date":(raw_history.Month.iat[-1]+pd.DateOffset(months=1)).strftime("%b %Y"),"forecast_value":prediction},"data_provenance":{"groundwater":"Selected station's raw CSV rows","features":feature_source,"raw_csv_rows":csv_rows}}
+        first_forecast_month = raw_history.Month.iat[-1] + pd.DateOffset(months=1)
+        return {"location":{"name":location.get("name","Searched location"),"address":location.get("address", ""),"latitude":latitude,"longitude":longitude},"station":{"code":code,"latitude":float(station.Latitude),"longitude":float(station.Longitude),"district":station.District,"block":station.Block,"gp_name":station["GP Name"],"distance_km":float(station.distance_km)},"current_groundwater":current,"prediction":prediction,"lstm_prediction":lstm_prediction,"change":change,"prediction_status":"approximately stable" if abs(change)<.1 else ("increase" if change>0 else "decrease"),"prediction_risk":prediction_risk,"forecast_method":method,"forecast_version":7,"decision_support":support,"history":history,"weather_history":weather,"temperature":self._number_or_none(last.temperature_c),"rainfall":rainfall,"soil_ph":self._number_or_none(last.soil_ph),"clay":self._number_or_none(last.clay_percent),"sand":self._number_or_none(last.sand_percent),"silt":self._number_or_none(last.silt_percent),"organic_carbon":self._number_or_none(last.organic_carbon),"nitrogen":self._number_or_none(last.nitrogen),"elevation":elevation,"chart":{"dates":[x["month"] for x in history],"values":[x["groundwater"] for x in history],"forecast_date":first_forecast_month.strftime("%b %Y"),"forecast_value":prediction},"forecast_outlook":self._forecast_months(first_forecast_month, prediction, levels),"data_provenance":{"groundwater":"Selected station's official NWDP raw CSV rows","features":feature_source,"elevation":elevation_source,"official_2026_2030_source":self.NWDP_2026_2030_URL,"raw_csv_rows":csv_rows}}

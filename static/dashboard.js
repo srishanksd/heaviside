@@ -1,3 +1,31 @@
+const pageLoader = document.getElementById("pageLoader");
+const themeToggle = document.getElementById("themeToggle");
+
+function syncTheme() {
+    const dark = document.body.classList.contains("dark-theme");
+    if (themeToggle) {
+        themeToggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+        themeToggle.querySelector("span").textContent = dark ? "☀" : "☾";
+    }
+    const chartElement = document.getElementById("groundwater-chart");
+    if (typeof Plotly !== "undefined" && chartElement && chartElement.data && chartElement.data.length) {
+        Plotly.relayout("groundwater-chart", {
+            font: { color: dark ? "#d7edf2" : "#082f49" },
+            "xaxis.gridcolor": dark ? "#264552" : "#edf2f5",
+            "yaxis.gridcolor": dark ? "#264552" : "#edf2f5"
+        });
+    }
+}
+
+if (localStorage.getItem("heaviside-theme") === "dark") document.body.classList.add("dark-theme");
+syncTheme();
+if (themeToggle) themeToggle.addEventListener("click", function () {
+    document.body.classList.toggle("dark-theme");
+    localStorage.setItem("heaviside-theme", document.body.classList.contains("dark-theme") ? "dark" : "light");
+    syncTheme();
+});
+window.addEventListener("load", function () { setTimeout(function () { if (pageLoader) pageLoader.classList.add("is-hidden"); }, 2300); });
+
 const chart =
     document.getElementById(
         "groundwater-chart"
@@ -253,5 +281,8 @@ if (!chart) {
             }
         }
     );
+
+    // Apply the selected theme after Plotly has created the graph.
+    syncTheme();
 
 }

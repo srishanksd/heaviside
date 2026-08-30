@@ -5,6 +5,29 @@
 (function () {
     "use strict";
 
+    /* Shared visual preferences and a lightweight analysis transition. */
+    var savedTheme = localStorage.getItem("heaviside-theme");
+    if (savedTheme === "dark") document.body.classList.add("dark-theme");
+    var themeToggle = document.getElementById("themeToggle");
+    function syncThemeButton() {
+        if (!themeToggle) return;
+        var dark = document.body.classList.contains("dark-theme");
+        themeToggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+        themeToggle.querySelector("span").textContent = dark ? "☀" : "☾";
+    }
+    syncThemeButton();
+    if (themeToggle) themeToggle.addEventListener("click", function () {
+        document.body.classList.toggle("dark-theme");
+        localStorage.setItem("heaviside-theme", document.body.classList.contains("dark-theme") ? "dark" : "light");
+        syncThemeButton();
+    });
+    var pageLoader = document.getElementById("pageLoader");
+    window.addEventListener("load", function () { setTimeout(function () { if (pageLoader) pageLoader.classList.add("is-hidden"); }, 700); });
+    document.addEventListener("click", function (event) {
+        var link = event.target.closest("a[href*='analyze']");
+        if (link && pageLoader) pageLoader.classList.remove("is-hidden");
+    });
+
     /* ============================================================
        NAVBAR
     ============================================================ */
