@@ -55,14 +55,14 @@ if (!chart) {
     );
 
 
-    const forecastDate =
-        chart.dataset.forecastDate;
+    const forecastDates = JSON.parse(
+        chart.dataset.forecastDates
+    );
 
 
-    const forecastValue =
-        Number(
-            chart.dataset.forecastValue
-        );
+    const forecastValues = JSON.parse(
+        chart.dataset.forecastValues
+    );
 
     const forecastLabel = chart.dataset.forecastLabel;
 
@@ -106,7 +106,7 @@ if (!chart) {
                 dates.length - 1
             ],
 
-            forecastDate
+            ...forecastDates
 
         ],
 
@@ -116,7 +116,7 @@ if (!chart) {
                 values.length - 1
             ],
 
-            forecastValue
+            ...forecastValues
 
         ],
 

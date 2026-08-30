@@ -110,14 +110,22 @@ class GroundwaterPredictor:
             except ValueError: continue
         raise ValueError("No monitoring location with a complete 12-month history was found.")
 
-    def _trained_prediction(self, code, prepared):
+    def _station_model_prediction(self, code, levels, target_month):
         model = self.station_forecaster
-        if model is None or code not in model["index"] or len(prepared) != 12: return None
-        levels = prepared.groundwater_level.to_numpy(float); target_month = (prepared.Month.iat[-1] + pd.DateOffset(months=1)).month
+        levels = np.asarray(levels, dtype=float)
+        if model is None or code not in model["index"] or len(levels) != 12:
+            return None
         one_hot = np.zeros(len(model["index"])); one_hot[model["index"][code]] = 1
         x = np.r_[[1, levels[-1], levels[-2], levels[-3], levels[-12], levels[-1]-levels[-2], levels[-1]-levels[-3], np.sin(2*np.pi*target_month/12), np.cos(2*np.pi*target_month/12)], one_hot]
         ridge = float(x @ model["weights"])
         return float(levels[-1] + model["blend"] * (ridge-levels[-1]))
+
+    def _trained_prediction(self, code, prepared):
+        if len(prepared) != 12:
+            return None
+        levels = prepared.groundwater_level.to_numpy(float)
+        target_month = (prepared.Month.iat[-1] + pd.DateOffset(months=1)).month
+        return self._station_model_prediction(code, levels, target_month)
 
     def _lstm_prediction(self, prepared):
         """Return a true LSTM forecast only for a complete compatible sequence."""
@@ -140,6 +148,23 @@ class GroundwaterPredictor:
         change = 0.60 * float(np.median(changes)) + 0.40 * float(changes[-1])
         return float(levels[-1] + np.clip(change, -2.0, 2.0))
 
+    @staticmethod
+    def _seasonal_changes(records):
+        """Median observed month-to-month change for each calendar month."""
+        records = records.sort_values("Month").drop_duplicates("Month", keep="last").reset_index(drop=True)
+        previous_month = records["Month"].shift(1) + pd.offsets.MonthBegin(1)
+        consecutive = records["Month"].eq(previous_month)
+        changes = records.loc[consecutive, ["Month", "Ground Water Level"]].copy()
+        changes["change"] = records["Ground Water Level"].diff().loc[consecutive].to_numpy()
+        return changes.groupby(changes["Month"].dt.month)["change"].median().to_dict()
+
+    def _seasonal_prediction(self, levels, target_month, seasonal_changes):
+        """Forecast from this station's observed change for the target month."""
+        change = seasonal_changes.get(target_month)
+        if change is None or not np.isfinite(change):
+            return self._directional_baseline(levels)
+        return float(levels[-1] + np.clip(change, -2.0, 2.0))
+
     def _environment_record(self, latitude, longitude, month):
         """Find the closest environmental record from the matching month."""
         candidates = self.prepared[self.prepared["Month"] == month]
@@ -160,8 +185,8 @@ class GroundwaterPredictor:
         elevation = station_rows["elevation_m"].dropna()
         return None if elevation.empty else float(elevation.median())
 
-    def _forecast_months(self, first_month, first_prediction, levels, months=3):
-        """Create a short, clearly labelled recursive monthly outlook."""
+    def _forecast_months(self, first_month, first_prediction, levels, code=None, use_station_model=False, seasonal_changes=None, months=3):
+        """Create a recursive outlook using the primary forecaster at every horizon."""
         outlook = []
         forecast_levels = list(np.asarray(levels, dtype=float))
         prediction = float(first_prediction)
@@ -169,9 +194,10 @@ class GroundwaterPredictor:
             month = first_month + pd.DateOffset(months=offset)
             outlook.append({"month": month.strftime("%b %Y"), "groundwater": round(prediction, 2)})
             forecast_levels.append(prediction)
-            # Subsequent horizons use a damped trend from observed plus forecasted
-            # levels, avoiding a claim that future government observations exist.
-            prediction = self._directional_baseline(np.asarray(forecast_levels))
+            next_month = month + pd.DateOffset(months=1)
+            prediction = self._station_model_prediction(code, forecast_levels[-12:], next_month.month) if use_station_model else None
+            if prediction is None:
+                prediction = self._seasonal_prediction(np.asarray(forecast_levels), next_month.month, seasonal_changes or {})
         return outlook
 
     @staticmethod
@@ -196,6 +222,8 @@ class GroundwaterPredictor:
     def analyze(self, location):
         latitude, longitude = float(location["latitude"]), float(location["longitude"])
         station, raw_history = self._nearest(latitude, longitude); code = station["Station Code"]
+        station_observations = self.raw[self.raw["Station Code"] == code].sort_values(["Month", "Monitoring Date", "csv_row_index"])
+        seasonal_changes = self._seasonal_changes(station_observations)
         prepared = self.prepared[(self.prepared["Station Code"] == code) & (self.prepared.Month.isin(raw_history.Month))].sort_values("Month")
         trained = len(prepared) == 12 and np.allclose(prepared.groundwater_level.to_numpy(float), raw_history["Ground Water Level"].to_numpy(float))
         levels = raw_history["Ground Water Level"].to_numpy(float); current = float(levels[-1])
@@ -210,9 +238,10 @@ class GroundwaterPredictor:
         environmental_rows = environmental_rows.reset_index(drop=True).copy()
         environmental_rows["groundwater_level"] = levels
         prediction = self._trained_prediction(code, prepared) if trained else None
+        first_forecast_month = raw_history.Month.iat[-1] + pd.DateOffset(months=1)
         if prediction is None:
-            prediction = self._directional_baseline(levels)
-            method = "Raw-history directional trend (nearest station)"
+            prediction = self._seasonal_prediction(levels, first_forecast_month.month, seasonal_changes)
+            method = "Station seasonal forecast (raw observations)"
         else: method = "Validated station-aware forecast"
         lstm_prediction = self._lstm_prediction(environmental_rows)
         weather = [{"month":row.Month.strftime("%b %Y"),"temperature_c":self._number_or_none(row.temperature_c),"rainfall_mm":self._number_or_none(row.rainfall_mm)} for row in environmental_rows.itertuples()]
@@ -230,5 +259,5 @@ class GroundwaterPredictor:
         change = prediction-current
         prediction_risk = "critical" if change >= 1.0 else ("moderate" if change >= 0.25 else "normal")
         feature_source = "Station-matched training features" if trained else "Nearest time-matched environmental dataset record"
-        first_forecast_month = raw_history.Month.iat[-1] + pd.DateOffset(months=1)
-        return {"location":{"name":location.get("name","Searched location"),"address":location.get("address", ""),"latitude":latitude,"longitude":longitude},"station":{"code":code,"latitude":float(station.Latitude),"longitude":float(station.Longitude),"district":station.District,"block":station.Block,"gp_name":station["GP Name"],"distance_km":float(station.distance_km)},"current_groundwater":current,"prediction":prediction,"lstm_prediction":lstm_prediction,"change":change,"prediction_status":"approximately stable" if abs(change)<.1 else ("increase" if change>0 else "decrease"),"prediction_risk":prediction_risk,"forecast_method":method,"forecast_version":7,"decision_support":support,"history":history,"weather_history":weather,"temperature":self._number_or_none(last.temperature_c),"rainfall":rainfall,"soil_ph":self._number_or_none(last.soil_ph),"clay":self._number_or_none(last.clay_percent),"sand":self._number_or_none(last.sand_percent),"silt":self._number_or_none(last.silt_percent),"organic_carbon":self._number_or_none(last.organic_carbon),"nitrogen":self._number_or_none(last.nitrogen),"elevation":elevation,"chart":{"dates":[x["month"] for x in history],"values":[x["groundwater"] for x in history],"forecast_date":first_forecast_month.strftime("%b %Y"),"forecast_value":prediction},"forecast_outlook":self._forecast_months(first_forecast_month, prediction, levels),"data_provenance":{"groundwater":"Selected station's official NWDP raw CSV rows","features":feature_source,"elevation":elevation_source,"official_2026_2030_source":self.NWDP_2026_2030_URL,"raw_csv_rows":csv_rows}}
+        forecast_outlook = self._forecast_months(first_forecast_month, prediction, levels, code, trained, seasonal_changes)
+        return {"location":{"name":location.get("name","Searched location"),"address":location.get("address", ""),"latitude":latitude,"longitude":longitude},"station":{"code":code,"latitude":float(station.Latitude),"longitude":float(station.Longitude),"district":station.District,"block":station.Block,"gp_name":station["GP Name"],"distance_km":float(station.distance_km)},"current_groundwater":current,"prediction":prediction,"lstm_prediction":lstm_prediction,"change":change,"prediction_status":"approximately stable" if abs(change)<.1 else ("increase" if change>0 else "decrease"),"prediction_risk":prediction_risk,"forecast_method":method,"forecast_version":9,"decision_support":support,"history":history,"weather_history":weather,"temperature":self._number_or_none(last.temperature_c),"rainfall":rainfall,"soil_ph":self._number_or_none(last.soil_ph),"clay":self._number_or_none(last.clay_percent),"sand":self._number_or_none(last.sand_percent),"silt":self._number_or_none(last.silt_percent),"organic_carbon":self._number_or_none(last.organic_carbon),"nitrogen":self._number_or_none(last.nitrogen),"elevation":elevation,"chart":{"dates":[x["month"] for x in history],"values":[x["groundwater"] for x in history],"forecast_dates":[x["month"] for x in forecast_outlook],"forecast_values":[x["groundwater"] for x in forecast_outlook]},"forecast_outlook":forecast_outlook,"data_provenance":{"groundwater":"Selected station's official NWDP raw CSV rows","features":feature_source,"elevation":elevation_source,"official_2026_2030_source":self.NWDP_2026_2030_URL,"raw_csv_rows":csv_rows}}

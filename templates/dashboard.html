@@ -304,9 +304,9 @@
 
                 data-values='{{ result["chart"]["values"] | tojson }}'
 
-                data-forecast-date="{{ result["chart"]["forecast_date"] }}"
+                data-forecast-dates='{{ result["chart"]["forecast_dates"] | tojson }}'
 
-                data-forecast-value="{{ result["chart"]["forecast_value"] }}"
+                data-forecast-values='{{ result["chart"]["forecast_values"] | tojson }}'
 
                 data-forecast-label="{{ result.forecast_method }}"
             >
