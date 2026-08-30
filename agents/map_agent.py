@@ -7,6 +7,8 @@ import requests
 
 class MapsAgent:
     endpoint = "https://nominatim.openstreetmap.org/search"
+    reverse_endpoint = "https://nominatim.openstreetmap.org/reverse"
+    elevation_endpoint = "https://api.open-meteo.com/v1/elevation"
 
     def __init__(self):
         self.session = requests.Session()
@@ -38,8 +40,46 @@ class MapsAgent:
             "longitude": float(item["lon"]),
             "name": item.get("name") or item["display_name"].split(",")[0],
             "address": item.get("display_name", ""),
+            "state": item.get("address", {}).get("state", ""),
         } for item in data]
 
     def extract_data(self, place):
         matches = self.results(place)
         return matches[0] if matches else None
+
+    @lru_cache(maxsize=512)
+    def state_at(self, latitude, longitude):
+        """Resolve the state for a coordinate before analysing it."""
+        try:
+            response = self.session.get(
+                self.reverse_endpoint,
+                params={"lat": round(float(latitude), 5), "lon": round(float(longitude), 5), "format": "jsonv2", "addressdetails": 1, "zoom": 5},
+                timeout=(5, 20),
+            )
+            response.raise_for_status()
+            return response.json().get("address", {}).get("state", "")
+        except requests.RequestException as error:
+            raise ValueError("Location verification is temporarily unavailable. Please retry.") from error
+
+    def require_karnataka(self, location):
+        """Reject locations outside the project's Karnataka monitoring scope."""
+        state = location.get("state") or self.state_at(location["latitude"], location["longitude"])
+        if "karnataka" not in str(state).casefold():
+            raise ValueError("Location outside Karnataka.")
+        location["state"] = state
+        return location
+
+    @lru_cache(maxsize=512)
+    def elevation(self, latitude, longitude):
+        """Return terrain elevation for the exact requested coordinate in metres."""
+        try:
+            response = self.session.get(
+                self.elevation_endpoint,
+                params={"latitude": round(float(latitude), 5), "longitude": round(float(longitude), 5)},
+                timeout=(5, 20),
+            )
+            response.raise_for_status()
+            values = response.json().get("elevation", [])
+            return float(values[0]) if values else None
+        except (requests.RequestException, ValueError, TypeError, IndexError):
+            return None

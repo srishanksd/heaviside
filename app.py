@@ -81,7 +81,7 @@ def dashboard():
     result = session.get("result")
     # Results are intentionally short-lived when the dashboard schema changes.
     # This avoids rendering an old session with incomplete/newly renamed fields.
-    if result is None or result.get("forecast_version") != 4:
+    if result is None or result.get("forecast_version") != 7:
         return redirect(url_for("home"))
     return render_template("dashboard.html", result=result)
 

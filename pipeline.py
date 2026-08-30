@@ -19,7 +19,9 @@ class Pipeline:
         return location
 
     def analyze(self, place):
-        return self.predictor.analyze(self.get_location(place))
+        location = self.map_agent.require_karnataka(self.get_location(place))
+        location["elevation_m"] = self.map_agent.elevation(location["latitude"], location["longitude"])
+        return self.predictor.analyze(location)
 
     def analyze_coordinates(self, lat, lng, name=None):
         """Analyze groundwater at specific coordinates (map click flow)."""
@@ -29,6 +31,8 @@ class Pipeline:
             "name": name or f"{lat:.4f}°N, {lng:.4f}°E",
             "address": ""
         }
+        self.map_agent.require_karnataka(location)
+        location["elevation_m"] = self.map_agent.elevation(lat, lng)
         return self.predictor.analyze(location)
 
     def get_station_overview(self):

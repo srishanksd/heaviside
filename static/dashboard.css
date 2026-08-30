@@ -26,6 +26,29 @@ body {
     color: #082f49;
 }
 
+body.dark-theme { background: linear-gradient(135deg, #071722, #0b2430 50%, #08221f); color: #e5f3f7; }
+body.dark-theme .location-panel, body.dark-theme .panel, body.dark-theme .kpi-card, body.dark-theme .environment-card, body.dark-theme .location-badge { background: #102936; color: #e5f3f7; box-shadow: 0 12px 35px rgba(0,0,0,.26); }
+body.dark-theme .location-panel { background: linear-gradient(135deg, #102936, #123740); }
+body.dark-theme .topbar p, body.dark-theme .location-panel p, body.dark-theme .risk-description, body.dark-theme .decision-card p, body.dark-theme .guidance-panel li, body.dark-theme .lstm-note, body.dark-theme .small-label, body.dark-theme .environment-card span, body.dark-theme th, body.dark-theme .kpi-value span { color: #a8c4ce; }
+body.dark-theme .lstm-card, body.dark-theme .outlook-item { background: #143441; border-color: #285160; }
+body.dark-theme .lstm-note { background: #102f3d; }
+body.dark-theme td, body.dark-theme th { border-color: #264552; }
+
+.topbar-actions { display: flex; align-items: center; gap: 10px; }
+.theme-toggle { width: 44px; height: 44px; border: 1px solid #bed5df; border-radius: 50%; background: #fff; color: #087f7d; cursor: pointer; font-size: 21px; line-height: 1; transition: transform .2s ease, background .2s ease; }
+.theme-toggle:hover { transform: translateY(-2px) rotate(12deg); }
+body.dark-theme .theme-toggle { background: #143441; color: #f6d365; border-color: #32606d; }
+
+.page-loader { position: fixed; inset: 0; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: radial-gradient(circle at 50% 45%, #e7fbfa, #eaf5fb 45%, #cce8ed); color: #075a63; transition: opacity .45s ease, visibility .45s ease; }
+.page-loader.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.page-loader p { margin: 16px 0 0; font-weight: 800; letter-spacing: .04em; }
+.page-loader span { font-size: 13px; color: #527086; }
+.loader-orbit { position: relative; width: 78px; height: 78px; border: 2px solid rgba(8,126,139,.22); border-radius: 50%; animation: loader-spin 2.6s linear infinite; }
+.loader-orbit i { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #0a9b9d; box-shadow: 0 0 0 7px rgba(10,155,157,.12); }
+.loader-orbit i:nth-child(1) { top: -6px; left: 28px; }.loader-orbit i:nth-child(2) { right: -6px; bottom: 17px; background: #2375a8; }.loader-orbit i:nth-child(3) { bottom: -6px; left: 16px; background: #52b788; }
+@keyframes loader-spin { to { transform: rotate(360deg); } }
+body.dark-theme .page-loader { background: radial-gradient(circle, #153b45, #071722); color: #d6f7f2; }
+
 .page {
     width: min(
         1500px,
@@ -414,6 +437,17 @@ body {
     margin-top: 35px;
 }
 
+.risk-circle.risk-critical { border-color: #e04b4b; color: #b42323; background: #fff0f0; }
+.risk-circle.risk-moderate { border-color: #ef8b2c; color: #b65d00; background: #fff4e8; }
+.risk-circle.risk-normal { border-color: #42b883; color: #16804e; background: #edfff6; }
+
+.outlook-panel { margin: 0 0 35px; }
+.outlook-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.outlook-item { padding: 18px; border: 1px solid #dcebef; border-radius: 16px; background: #f7fcfd; }
+.outlook-item span, .outlook-item small { display: block; color: #698397; font-size: 12px; font-weight: 700; }
+.outlook-item strong { display: block; margin-top: 8px; font-size: 25px; color: #087f7d; }
+.outlook-item strong small { display: inline; font-weight: 500; }
+
 .table-wrapper {
     margin-top: 15px;
 
@@ -588,6 +622,9 @@ th {
         gap: 15px;
     }
 
+    .topbar-actions { width: 100%; justify-content: space-between; }
+    .location-badge { max-width: calc(100% - 54px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
     .kpi-grid {
         grid-template-columns: 1fr;
     }
@@ -601,4 +638,12 @@ th {
     .guidance-grid {
         grid-template-columns: 1fr;
     }
+
+    .outlook-grid { grid-template-columns: 1fr; }
+
+    .page { width: min(100% - 28px, 1500px); padding-top: 18px; }
+    .location-panel, .panel, .kpi-card { padding: 20px; }
+    .location-panel h1 { font-size: 28px; overflow-wrap: anywhere; }
+    #groundwater-chart { height: 330px; }
+    .forecast-pill { max-width: 150px; text-align: center; }
 }

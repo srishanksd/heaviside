@@ -8,8 +8,12 @@
   <style>html,body{overflow:hidden}</style>
 </head>
 <body>
+  <div id="pageLoader" class="page-loader" role="status" aria-label="Loading groundwater analysis">
+    <div class="loader-orbit"><i></i><i></i><i></i></div><p>Mapping groundwater signals</p><span>Preparing your analysis…</span>
+  </div>
   <main class="map-page">
     <div id="map" aria-label="Karnataka groundwater monitoring stations"></div>
+    <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch to dark theme" title="Switch theme"><span aria-hidden="true">☾</span></button>
     <section class="map-search" aria-label="Search groundwater location">
       <p class="eyebrow">HEAVISIDE · GROUNDWATER INTELLIGENCE</p>
       <h1>Find a monitored location</h1>
