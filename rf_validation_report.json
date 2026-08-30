@@ -1,0 +1,30 @@
+{
+    "model_type": "RandomForestRegressor",
+    "n_estimators": 300,
+    "max_depth": 20,
+    "train_samples": 7805,
+    "test_samples": 8233,
+    "mae": 4.374863607039031,
+    "rmse": 9.385409633814405,
+    "r2": 0.926082024471429,
+    "anomaly_threshold": 12.654089767357766,
+    "feature_columns": [
+        "Latitude",
+        "Longitude",
+        "temperature_c",
+        "rainfall_mm",
+        "soil_ph",
+        "clay_percent",
+        "sand_percent",
+        "silt_percent",
+        "organic_carbon",
+        "nitrogen",
+        "GWL_lag_1",
+        "GWL_lag_2",
+        "GWL_lag_3",
+        "GWL_rolling_mean_3",
+        "GWL_rolling_std_3",
+        "Month_sin",
+        "Month_cos"
+    ]
+}

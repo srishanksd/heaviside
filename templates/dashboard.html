@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Groundwater Intelligence
+    </title>
+
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for(
+            'static',
+            filename='dashboard.css'
+        ) }}"
+    >
+
+
+    <script
+        src="https://cdn.plot.ly/plotly-2.35.2.min.js">
+    </script>
+
+</head>
+
+
+<body>
+
+
+<div class="page">
+
+
+    <header class="topbar">
+
+
+        <div>
+
+            <div class="brand">
+
+                HEAVI<span>SIDE</span>
+
+            </div>
+
+
+            <p>
+                AI-Powered Groundwater Intelligence
+            </p>
+
+        </div>
+
+
+        <div class="location-badge">
+
+            {{ result.location.name }}
+
+        </div>
+        
+
+
+    </header>
+
+
+    <section class="location-panel">
+
+
+        <span class="small-label">
+            ANALYZED LOCATION
+        </span>
+
+
+        <h1>
+            {{ result.location.name }}
+        </h1>
+
+
+        {% if result.location.address %}
+
+        <p>
+            {{ result.location.address }}
+        </p>
+
+        {% endif %}
+
+
+        <div class="coordinates">
+
+            {{ "%.5f"|format(
+                result.location.latitude
+            ) }}
+
+            ,
+
+            {{ "%.5f"|format(
+                result.location.longitude
+            ) }}
+
+        </div>
+
+        <p>Nearest monitoring coordinate · {{ "%.5f"|format(result.station.latitude) }}, {{ "%.5f"|format(result.station.longitude) }} · {{ "%.2f"|format(result.station.distance_km) }} km away</p>
+
+
+    </section>
+
+    <section class="decision-grid">
+        <article class="panel decision-card">
+            <span class="small-label">FORECAST CONFIDENCE</span>
+            {% if result.decision_support.probability_percent is not none %}
+            <strong class="decision-value">{{ "%.1f"|format(result.decision_support.probability_percent) }}%</strong>
+            <p>{{ result.decision_support.probability_label }}; calibrated from held-out validation errors.</p>
+            {% else %}<strong class="decision-value">—</strong><p>Validation probability is unavailable for this method.</p>{% endif %}
+        </article>
+        <article class="panel decision-card">
+            <span class="small-label">ANOMALY DETECTION</span>
+            <strong class="decision-value signal-{{ result.decision_support.anomaly_level }}">{{ result.decision_support.anomaly_level|upper }}</strong>
+            <p>{{ result.decision_support.anomaly_text }}</p>
+        </article>
+        <article class="panel decision-card">
+            <span class="small-label">MONITORING PRIORITY</span>
+            <strong class="decision-value signal-{{ result.decision_support.priority }}">{{ result.decision_support.priority|upper }} · {{ result.decision_support.priority_score }}/100</strong>
+            <p>Relative monitoring priority—not a water-safety or regulatory rating.</p>
+        </article>
+    </section>
+
+    <section class="panel guidance-panel">
+        <div class="panel-header"><div><span class="small-label">ACTIONABLE GUIDANCE</span><h2>Next steps</h2></div></div>
+        <div class="guidance-grid">
+            <div><h3>Government & agencies</h3><ul>{% for item in result.decision_support.government_guidance %}<li>{{ item }}</li>{% endfor %}</ul></div>
+            <div><h3>Residents & farmers</h3><ul>{% for item in result.decision_support.community_guidance %}<li>{{ item }}</li>{% endfor %}</ul></div>
+            <div><h3>Platform capabilities</h3><ul><li>Automated ingestion & analysis</li><li>Early anomaly detection</li><li>Validated future prediction</li><li>Water-stress prioritization</li><li>Crop & irrigation guidance</li></ul></div>
+        </div>
+    </section>
+
+    <!-- ==================================================
+         KPI CARDS
+    =================================================== -->
+
+    <section class="kpi-grid">
+
+
+        <div class="kpi-card">
+
+            <span class="small-label">
+                CURRENT LEVEL
+            </span>
+
+
+            <div class="kpi-value">
+
+                {{ "%.2f"|format(
+                    result.current_groundwater
+                ) }}
+
+                <span>m</span>
+
+            </div>
+
+        </div>
+
+
+
+        <div class="kpi-card highlight">
+
+            <span class="small-label">
+                NEXT MONTH FORECAST
+            </span>
+
+
+            <div class="kpi-value">
+
+                {{ "%.2f"|format(
+                    result.prediction
+                ) }}
+
+                <span>m</span>
+
+            </div>
+
+
+            <div
+                class="
+                    change
+                    {% if result.change >= 0 %}
+                        positive
+                    {% else %}
+                        negative
+                    {% endif %}
+                "
+            >
+
+                {% if result.change >= 0 %}
+                    ▲
+                {% else %}
+                    ▼
+                {% endif %}
+
+
+                {{ "%.2f"|format(
+                    result.change|abs
+                ) }}
+
+                m
+
+            </div>
+
+
+        </div>
+
+
+
+        <div class="kpi-card">
+
+            <span class="small-label">
+                TEMPERATURE
+            </span>
+
+
+            <div class="kpi-value">
+
+                {{ "%.1f"|format(result.temperature) if result.temperature is not none else "—" }}
+
+                <span>°C</span>
+
+            </div>
+
+        </div>
+
+
+
+        <div class="kpi-card">
+
+            <span class="small-label">
+                RAINFALL
+            </span>
+
+
+            <div class="kpi-value">
+
+                {{ "%.1f"|format(result.rainfall) if result.rainfall is not none else "—" }}
+
+                <span>mm</span>
+
+            </div>
+
+        </div>
+
+
+    </section>
+
+
+
+    <!-- ==================================================
+         MAIN GRID
+    =================================================== -->
+
+    <section class="main-grid">
+
+
+        <!-- CHART -->
+
+        <div class="panel large-panel">
+
+
+            <div class="panel-header">
+
+
+                <div>
+
+                    <span class="small-label">
+                        FORECAST ANALYTICS
+                    </span>
+
+
+                    <h2>
+                        Groundwater Trend
+                    </h2>
+
+                </div>
+
+
+                <div class="forecast-pill">
+                    {{ result.forecast_method }}
+                </div>
+
+
+            </div>
+
+
+            <div
+                id="groundwater-chart"
+
+                data-dates='{{ result["chart"]["dates"] | tojson }}'
+
+                data-values='{{ result["chart"]["values"] | tojson }}'
+
+                data-forecast-date="{{ result["chart"]["forecast_date"] }}"
+
+                data-forecast-value="{{ result["chart"]["forecast_value"] }}"
+
+                data-forecast-label="{{ result.forecast_method }}"
+            >
+            </div>
+
+
+        </div>
+
+
+
+        <!-- RISK -->
+
+        <div class="panel risk-panel">
+
+
+            <span class="small-label">
+                PREDICTION STATUS
+            </span>
+
+
+            <h2>
+                Expected {{ result.prediction_status }}
+            </h2>
+
+
+            <div
+                class="
+                    risk-circle
+                    risk-low
+                "
+            >
+
+                {{ result.prediction_status|upper }}
+
+            </div>
+
+
+            <div class="risk-description">
+
+
+                <strong>
+                    Forecast:
+                </strong>
+
+
+                {{ "%.2f"|format(
+                    result.prediction
+                ) }}
+
+                m
+
+                <br>
+                <br>
+
+                <strong>Method:</strong>
+                {{ result.forecast_method }}
+
+
+                <br>
+                <br>
+
+
+                <strong>
+                    Change:
+                </strong>
+
+
+                {{ "%.2f"|format(
+                    result.change
+                ) }}
+
+                m
+
+            </div>
+
+
+        </div>
+
+
+    </section>
+
+
+
+    <!-- ==================================================
+         ENVIRONMENT
+    =================================================== -->
+
+    <section>
+
+
+        <div class="section-title">
+
+
+            <span class="small-label">
+                ENVIRONMENTAL PROFILE
+            </span>
+
+
+            <h2>
+                Local Conditions
+            </h2>
+
+
+        </div>
+
+
+
+        <div class="environment-grid">
+
+
+            <div class="environment-card">
+
+                <span>
+                    SOIL pH
+                </span>
+
+
+                <strong>
+
+                    {{ "%.2f"|format(result.soil_ph) if result.soil_ph is not none else "—" }}
+
+                </strong>
+
+            </div>
+
+
+
+            <div class="environment-card">
+
+                <span>
+                    CLAY
+                </span>
+
+
+                <strong>
+
+                    {{ "%.1f"|format(result.clay) + "%" if result.clay is not none else "—" }}
+
+                </strong>
+
+            </div>
+
+
+
+            <div class="environment-card">
+
+                <span>
+                    SAND
+                </span>
+
+
+                <strong>
+
+                    {{ "%.1f"|format(result.sand) + "%" if result.sand is not none else "—" }}
+
+                </strong>
+
+            </div>
+
+
+
+            <div class="environment-card">
+
+                <span>
+                    SILT
+                </span>
+
+
+                <strong>
+
+                    {{ "%.1f"|format(result.silt) + "%" if result.silt is not none else "—" }}
+
+                </strong>
+
+            </div>
+
+
+
+            <div class="environment-card">
+
+                <span>
+                    ORGANIC CARBON
+                </span>
+
+
+                <strong>
+
+                    {{ "%.2f"|format(result.organic_carbon) if result.organic_carbon is not none else "—" }}
+
+                </strong>
+
+            </div>
+
+
+
+            <div class="environment-card">
+
+                <span>
+                    NITROGEN
+                </span>
+
+
+                <strong>
+
+                    {{ "%.2f"|format(result.nitrogen) if result.nitrogen is not none else "—" }}
+
+                </strong>
+
+            </div>
+
+
+
+            <div class="environment-card">
+
+                <span>
+                    ELEVATION
+                </span>
+
+
+                <strong>
+
+                    {{ ("%.0f"|format(result.elevation) + " m") if result.elevation is not none else "—" }}
+
+                </strong>
+
+            </div>
+
+
+        </div>
+
+
+    </section>
+
+
+
+    <!-- ==================================================
+         HISTORY
+    =================================================== -->
+
+    <section class="panel history-panel">
+
+
+        <div class="panel-header">
+
+
+            <div>
+
+                <span class="small-label">
+                    MONITORING HISTORY
+                </span>
+
+
+                <h2>
+                    Historical Groundwater
+                </h2>
+
+            </div>
+
+
+        </div>
+
+
+
+        <div class="table-wrapper">
+
+
+            <table>
+
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            Month
+                        </th>
+
+                        <th>
+                            Groundwater
+                        </th>
+
+                        <th>Temperature</th>
+                        <th>Rainfall</th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+
+                    {% for row in result.history %}
+
+                    <tr>
+
+                        <td>
+                            {{ row.month }}
+                        </td>
+
+                        <td>
+
+                            {{ "%.2f"|format(
+                                row.groundwater
+                            ) }}
+
+                            m
+
+                        </td>
+
+                        <td>{{ ("%.1f"|format(result.weather_history[loop.index0].temperature_c) + " °C") if result.weather_history[loop.index0].temperature_c is not none else "—" }}</td>
+                        <td>{{ ("%.1f"|format(result.weather_history[loop.index0].rainfall_mm) + " mm") if result.weather_history[loop.index0].rainfall_mm is not none else "—" }}</td>
+
+                    </tr>
+
+                    {% endfor %}
+
+
+                </tbody>
+
+
+            </table>
+
+
+        </div>
+
+
+    </section>
+
+    {% if result["lstm_prediction"] is not none %}
+    <section class="panel lstm-panel" aria-label="Forecast model comparison">
+        <div class="panel-header"><div><span class="small-label">MODEL COMPARISON</span><h2>LSTM and station-aware forecast</h2></div></div>
+        <div class="lstm-grid">
+            <div class="lstm-card"><span class="small-label">LSTM FORECAST</span><div class="lstm-value">{{ "%.2f"|format(result["lstm_prediction"]) }} <span>m</span></div></div>
+            <div class="lstm-card"><span class="small-label">PRIMARY FORECAST</span><div class="lstm-value highlight-rf">{{ "%.2f"|format(result["prediction"]) }} <span>m</span></div></div>
+            <div class="lstm-card"><span class="small-label">CURRENT LEVEL</span><div class="lstm-value">{{ "%.2f"|format(result["current_groundwater"]) }} <span>m</span></div></div>
+            <div class="lstm-card"><span class="small-label">MODEL DIFFERENCE</span><div class="lstm-value">{{ "%.2f"|format((result["lstm_prediction"] - result["prediction"])|abs) }} <span>m</span></div></div>
+        </div>
+        <p class="lstm-note">Both figures are independent one-month forecasts from the loaded trained models. The primary forecast remains the validated station-aware result.</p>
+    </section>
+    {% endif %}
+
+</div>
+
+
+<!-- ======================================================
+     DASHBOARD JS
+======================================================= -->
+
+<script
+    src="{{ url_for(
+        'static',
+        filename='dashboard.js'
+    ) }}">
+</script>
+
+
+</body>
+
+</html>
