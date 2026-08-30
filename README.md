@@ -133,6 +133,10 @@ Use the following evidence trail in a demonstration:
    groundwater level. Zero readings that contradict adjacent normal readings
    are excluded as source-quality faults, not converted into forecasts.
 
+
+<video src="./assets/demo_video.mp4" controls width="100%"></video>
+
+
 ## Team
 
 | Member | USN |
