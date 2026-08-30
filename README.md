@@ -134,8 +134,7 @@ Use the following evidence trail in a demonstration:
    are excluded as source-quality faults, not converted into forecasts.
 
 
-<video src="./assets/demo_video.mp4" controls width="100%"></video>
-
+[Demo Video Link](https://drive.google.com/drive/folders/1fD44wTBdTEYyN5ZmkOm1XpWrWEumV51J?usp=sharing)
 
 ## Team
 
